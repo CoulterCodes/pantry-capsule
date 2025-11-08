@@ -1,0 +1,22 @@
+# Python
+*.pyc
+__pycache__/
+
+# Virtual environment
+venv/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# Local dev database
+pantry.db
+test.db
+
+# Environment files (optional)
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
