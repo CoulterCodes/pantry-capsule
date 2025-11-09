@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+# backend/app/routers/meal_planner.py
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.utils.meal_planner import MealPlanner
-from app.models import MealPlan
+from app.core import security
+from app.models import MealPlan, User
+from app.utils import schemas
 
 router = APIRouter(prefix="/meal-planner", tags=["meal-planner"])
 
+# ----------------------------
+# Dependency to get DB
+# ----------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -13,19 +19,54 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/generate/{user_id}", response_model=dict)
-def generate_meal_plan(user_id: int, db: Session = Depends(get_db)):
-    planner = MealPlanner(db, user_id)
+# ----------------------------
+# Dependency to get current user from JWT
+# ----------------------------
+def get_current_user(
+    token: str = Depends(security.oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    user_id = security.verify_access_token(token, credentials_exception)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ----------------------------
+# Generate Meal Plan
+# ----------------------------
+@router.post("/generate", response_model=schemas.MealPlanOut)
+def generate_meal_plan(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    planner = MealPlanner(db, current_user.id)
     meal_plan = planner.suggest_meals()
     shopping_list = planner.export_shopping_list(meal_plan)
-    return {
-        "meal_plan_id": meal_plan.id,
-        "date": str(meal_plan.date),
-        "shopping_list": shopping_list,
-    }
 
-@router.post("/remove-item/{user_id}/{food_item_id}")
-def remove_food_item(user_id: int, food_item_id: int, db: Session = Depends(get_db)):
-    planner = MealPlanner(db, user_id)
+    # Attach shopping list dynamically
+    meal_plan.shopping_list = shopping_list
+
+    # Eager load meals and their food items
+    for meal in meal_plan.meals:
+        meal.food_items  # relationship already defined in SQLAlchemy
+
+    return meal_plan
+
+# ----------------------------
+# Remove Food Item
+# ----------------------------
+@router.post("/remove-item/{food_item_id}", response_model=dict)
+def remove_food_item(
+    food_item_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    planner = MealPlanner(db, current_user.id)
     planner.mark_removed(food_item_id)
-    return {"message": f"Food item {food_item_id} marked as removed for user {user_id}"}
+    return {"message": f"Food item {food_item_id} marked as removed for user {current_user.id}"}
