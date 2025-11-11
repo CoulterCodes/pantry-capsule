@@ -1,52 +1,38 @@
 # app/core/security.py
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from jose import jwt, JWTError
 from typing import Optional
+from app.core.config import SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-
-# --- Password hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def get_password_hash(password: str) -> str:
-    truncated_password = password[:72]
-    return pwd_context.hash(password)
+# Password helpers
+def hash_password(password: str) -> str:
+    # bcrypt truncates at 72 bytes — best practice: reject overly long raw password in frontend OR shorten here
+    pw = password if isinstance(password, str) else str(password)
+    if len(pw.encode("utf-8")) > 72:
+        pw = pw[:72]
+    return pwd_context.hash(pw)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    pw = plain_password if isinstance(plain_password, str) else str(plain_password)
+    if len(pw.encode("utf-8")) > 72:
+        pw = pw[:72]
+    return pwd_context.verify(pw, hashed_password)
 
-# --- JWT Configuration ---
-SECRET_KEY = "QBfnDgNPqmeG7Aas5BTyPMjzC6hYiWXbFut5iiWBxvk"  # Replace with env var in production
+# JWT helpers
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_minutes: Optional[int] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.utcnow() + timedelta(minutes=(expires_minutes or ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def verify_access_token(token: str, credentials_exception):
+def verify_access_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        return int(user_id)
+        return payload
     except JWTError:
-        raise credentials_exception
-
-# --- OAuth2 Scheme ---
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-# --- Dependency to get current user ID ---
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    return verify_access_token(token, credentials_exception)
+        return None
