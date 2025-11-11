@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import meal_planner, auth
+from app.core.config import ALLOWED_ORIGINS
 
 app = FastAPI()
 
 app.include_router(meal_planner.router)
 app.include_router(auth.router)
 
-origins = [
+origins = ALLOWED_ORIGINS or [
     "http://localhost",
     "http://localhost:3000",
 ]
