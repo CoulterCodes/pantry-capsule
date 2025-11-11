@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, constr, model_validator
 from typing import List, Optional
 from datetime import date
 
@@ -20,7 +20,9 @@ class UserBase(BaseModel):
     email: str
 
 class UserCreate(UserBase):
-    password: str
+    username: str
+    email: EmailStr
+    password: constr(min_length=8, max_length=72)
 
 class User(UserBase):
     id: int
@@ -28,6 +30,25 @@ class User(UserBase):
     preferences: List[Preference] = []
     class Config:
         orm_mode = True
+
+class UserLogin(BaseModel):
+    email: EmailStr | None = None
+    username: str | None = None
+    password: constr(min_length=8, max_length=72)
+
+    @model_validator(mode="before")
+    def check_either_email_or_username(cls, values):
+        if not values.get("email") and not values.get("username"):
+            raise ValueError("Either email or username must be provided")
+        return values
+    
+    class Config:
+        json_schema_extra = {
+            "example:": {
+                "email": "testuser@example.com",
+                "password": "P@ssw0rd1"
+            }
+        }
 
 # Token Schema
 class Token(BaseModel):

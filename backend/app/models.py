@@ -31,6 +31,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
+    password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
 
     preferences = relationship("Preference", back_populates="user", cascade="all, delete")
     meal_plans = relationship("MealPlan", back_populates="user")
