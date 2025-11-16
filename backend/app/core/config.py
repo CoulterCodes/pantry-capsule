@@ -5,7 +5,7 @@ from typing import List
 
 load_dotenv()  # reads .env in project root
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./pantry.db")
+DATABASE_URL = "postgresql://postgres:dSean$ter531!@localhost:5432/pantry_capsule"
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 

@@ -1,8 +1,8 @@
-"""add meals and food items tables
+"""Initial schema
 
-Revision ID: f0285b6925a1
-Revises: 50c4a324d5b7
-Create Date: 2025-11-08 07:19:31.445193
+Revision ID: 11fd321b3e3b
+Revises: 
+Create Date: 2025-11-15 19:41:53.670504
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f0285b6925a1'
-down_revision: Union[str, Sequence[str], None] = '50c4a324d5b7'
+revision: str = '11fd321b3e3b'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -30,6 +30,7 @@ def upgrade() -> None:
     sa.Column('carbs', sa.Float(), nullable=True),
     sa.Column('fat', sa.Float(), nullable=True),
     sa.Column('tags', sa.String(), nullable=True),
+    sa.Column('source', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_food_items_category'), 'food_items', ['category'], unique=False)
@@ -44,6 +45,39 @@ def upgrade() -> None:
     op.create_index(op.f('ix_meals_id'), 'meals', ['id'], unique=False)
     op.create_index(op.f('ix_meals_meal_type'), 'meals', ['meal_type'], unique=False)
     op.create_index(op.f('ix_meals_name'), 'meals', ['name'], unique=False)
+    op.create_table('produce_classifications',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('year', sa.Integer(), nullable=True),
+    sa.Column('produce_items', sa.String(), nullable=True),
+    sa.Column('last_updated', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_produce_classifications_id'), 'produce_classifications', ['id'], unique=False)
+    op.create_index(op.f('ix_produce_classifications_name'), 'produce_classifications', ['name'], unique=True)
+    op.create_index(op.f('ix_produce_classifications_year'), 'produce_classifications', ['year'], unique=False)
+    op.create_table('recipes',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('servings', sa.Float(), nullable=True),
+    sa.Column('instructions', sa.String(), nullable=True),
+    sa.Column('source_url', sa.String(), nullable=True),
+    sa.Column('tags', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_recipes_id'), 'recipes', ['id'], unique=False)
+    op.create_index(op.f('ix_recipes_name'), 'recipes', ['name'], unique=False)
+    op.create_table('users',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(), nullable=True),
+    sa.Column('email', sa.String(), nullable=True),
+    sa.Column('password', sa.String(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
+    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
     op.create_table('meal_foods',
     sa.Column('meal_id', sa.Integer(), nullable=True),
     sa.Column('food_item_id', sa.Integer(), nullable=True),
@@ -58,6 +92,31 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_meal_plans_id'), 'meal_plans', ['id'], unique=False)
+    op.create_table('meal_recipes',
+    sa.Column('meal_id', sa.Integer(), nullable=True),
+    sa.Column('recipe_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['meal_id'], ['meals.id'], ),
+    sa.ForeignKeyConstraint(['recipe_id'], ['recipes.id'], )
+    )
+    op.create_table('preferences',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('key', sa.String(), nullable=True),
+    sa.Column('value', sa.String(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_preferences_id'), 'preferences', ['id'], unique=False)
+    op.create_index(op.f('ix_preferences_key'), 'preferences', ['key'], unique=False)
+    op.create_table('recipe_ingredients',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('recipe_id', sa.Integer(), nullable=True),
+    sa.Column('food_item_id', sa.Integer(), nullable=True),
+    sa.Column('quantity', sa.Float(), nullable=True),
+    sa.ForeignKeyConstraint(['food_item_id'], ['food_items.id'], ),
+    sa.ForeignKeyConstraint(['recipe_id'], ['recipes.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('restrictions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=True),
@@ -95,9 +154,25 @@ def downgrade() -> None:
     op.drop_table('user_food_history')
     op.drop_index(op.f('ix_restrictions_id'), table_name='restrictions')
     op.drop_table('restrictions')
+    op.drop_table('recipe_ingredients')
+    op.drop_index(op.f('ix_preferences_key'), table_name='preferences')
+    op.drop_index(op.f('ix_preferences_id'), table_name='preferences')
+    op.drop_table('preferences')
+    op.drop_table('meal_recipes')
     op.drop_index(op.f('ix_meal_plans_id'), table_name='meal_plans')
     op.drop_table('meal_plans')
     op.drop_table('meal_foods')
+    op.drop_index(op.f('ix_users_username'), table_name='users')
+    op.drop_index(op.f('ix_users_id'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
+    op.drop_index(op.f('ix_recipes_name'), table_name='recipes')
+    op.drop_index(op.f('ix_recipes_id'), table_name='recipes')
+    op.drop_table('recipes')
+    op.drop_index(op.f('ix_produce_classifications_year'), table_name='produce_classifications')
+    op.drop_index(op.f('ix_produce_classifications_name'), table_name='produce_classifications')
+    op.drop_index(op.f('ix_produce_classifications_id'), table_name='produce_classifications')
+    op.drop_table('produce_classifications')
     op.drop_index(op.f('ix_meals_name'), table_name='meals')
     op.drop_index(op.f('ix_meals_meal_type'), table_name='meals')
     op.drop_index(op.f('ix_meals_id'), table_name='meals')

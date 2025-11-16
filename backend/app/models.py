@@ -1,26 +1,7 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, Float, Boolean, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, Float, Boolean, Date, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from .db import Base
-
-# -----------------------------
-# Association Tables
-# -----------------------------
-
-# Many-to-many between Meals and FoodItems
-meal_food_association = Table(
-    "meal_foods",
-    Base.metadata,
-    Column("meal_id", Integer, ForeignKey("meals.id")),
-    Column("food_item_id", Integer, ForeignKey("food_items.id")),
-)
-
-# Many-to-many between MealPlans and Meals
-mealplan_meals_association = Table(
-    "mealplan_meals",
-    Base.metadata,
-    Column("mealplan_id", Integer, ForeignKey("meal_plans.id")),
-    Column("meal_id", Integer, ForeignKey("meals.id")),
-)
 
 # -----------------------------
 # User and Preferences
@@ -50,6 +31,29 @@ class Preference(Base):
 
     user = relationship("User", back_populates="preferences")
 
+# -----------------------------
+# Association Tables
+# -----------------------------
+meal_food_association = Table(
+    "meal_foods",
+    Base.metadata,
+    Column("meal_id", Integer, ForeignKey("meals.id")),
+    Column("food_item_id", Integer, ForeignKey("food_items.id")),
+)
+
+mealplan_meals_association = Table(
+    "mealplan_meals",
+    Base.metadata,
+    Column("mealplan_id", Integer, ForeignKey("meal_plans.id")),
+    Column("meal_id", Integer, ForeignKey("meals.id")),
+)
+
+meal_recipe_association = Table(
+    "meal_recipes",
+    Base.metadata,
+    Column("meal_id", Integer, ForeignKey("meals.id")),
+    Column("recipe_id", Integer, ForeignKey("recipes.id")),
+)
 
 # -----------------------------
 # FoodItem
@@ -59,12 +63,55 @@ class FoodItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    category = Column(String, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
     calories = Column(Float)
     protein = Column(Float)
     carbs = Column(Float)
     fat = Column(Float)
-    tags = Column(String)  # comma-separated tags
+    tags = Column(String)
+    source = Column(String)
+
+    category = relationship("Category", back_populates="items")
+    recipe_ingredients = relationship("RecipeIngredient", back_populates="food_item", lazy="selectin")
+
+# -----------------------------
+# Category
+# -----------------------------
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    items = relationship("FoodItem", back_populates="category", lazy="selectin")
+
+# -----------------------------
+# Recipe
+# -----------------------------
+class Recipe(Base):
+    __tablename__ = "recipes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    servings = Column(Float)
+    instructions = Column(String)
+    source_url = Column(String, nullable=True)
+    tags = Column(String)
+
+    ingredients = relationship("RecipeIngredient", back_populates="recipe", lazy="selectin")
+
+# -----------------------------
+# RecipeIngredient
+# -----------------------------
+class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+
+    id = Column(Integer, primary_key=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    food_item_id = Column(Integer, ForeignKey("food_items.id"))
+    quantity = Column(Float, nullable=True)
+
+    recipe = relationship("Recipe", back_populates="ingredients")
+    food_item = relationship("FoodItem", back_populates="recipe_ingredients")
 
 # -----------------------------
 # Meal
@@ -74,8 +121,10 @@ class Meal(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
-    meal_type = Column(String, index=True)  # breakfast, lunch, dinner, snack
+    meal_type = Column(String, index=True)
+
     food_items = relationship("FoodItem", secondary=meal_food_association, backref="meals")
+    recipes = relationship("Recipe", secondary=meal_recipe_association, backref="meals")
     meal_plans = relationship("MealPlan", secondary=mealplan_meals_association, back_populates="meals")
 
 # -----------------------------
@@ -92,7 +141,7 @@ class MealPlan(Base):
     meals = relationship("Meal", secondary=mealplan_meals_association, back_populates="meal_plans")
 
 # -----------------------------
-# User Food History
+# UserFoodHistory
 # -----------------------------
 class UserFoodHistory(Base):
     __tablename__ = "user_food_history"
@@ -106,7 +155,7 @@ class UserFoodHistory(Base):
     user = relationship("User", back_populates="food_history")
 
 # -----------------------------
-# Restrictions
+# Restriction
 # -----------------------------
 class Restriction(Base):
     __tablename__ = "restrictions"
@@ -116,3 +165,18 @@ class Restriction(Base):
     food_item_id = Column(Integer, ForeignKey("food_items.id"))
 
     user = relationship("User", back_populates="restrictions")
+
+# -----------------------------
+# ProduceClassification
+# -----------------------------
+class ProduceClassification(Base):
+    __tablename__ = "produce_classifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, unique=True)
+    year = Column(Integer, index=True)
+    produce_items = Column(String)
+    last_updated = Column(DateTime, default=datetime.utcnow)
+
+    def get_items(self):
+        return [item.strip() for item in self.produce_items.split(",") if item.strip()]

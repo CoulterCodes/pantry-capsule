@@ -1,8 +1,8 @@
 # app/utils/meal_planner.py
 from datetime import date
 from typing import List, Optional
+import random
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 from app.models import (
     User,
     Meal,
@@ -94,4 +94,29 @@ class MealPlanner:
         for meal_type in types:
             candidates = [m for m in meals if m.meal_type == meal_type]
             if candidates:
-                selected = candidates[0]
+                selected = random.choice(candidates)
+                meal_plan.meals.append(selected)
+
+        self.db.commit()
+        self.db.refresh(meal_plan)
+        return meal_plan
+
+    def export_shopping_list(self, meal_plan: MealPlan) -> dict:
+        """
+        Build a shopping list for all food items in the given meal plan.
+        Returns a dictionary with food item names as keys and details as values.
+        """
+        shopping_items = {}
+        for meal in meal_plan.meals:
+            for item in meal.food_items:
+                if not item.name:
+                    continue  # Skip if name is None
+                category_name = item.category.name if item.category else "Unknown"
+                if item.name not in shopping_items:
+                    shopping_items[item.name] = {
+                        "category": category_name,
+                        "quantity": 1
+                    }
+                else:
+                    shopping_items[item.name]["quantity"] += 1
+        return shopping_items
