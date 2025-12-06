@@ -1,4 +1,6 @@
 # backend/seed_db.py
+import os
+import requests
 from sqlalchemy.orm import Session
 from datetime import date
 from app.db import SessionLocal
@@ -13,8 +15,52 @@ from app.models import (
 )
 
 # -----------------------------
-# Seed Data
+# USDA API Setup
 # -----------------------------
+USE_REAL_NUTRITION_API = True
+
+USDA_API_KEY = os.getenv("USDA_API_KEY", "")
+USDA_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
+
+
+def fetch_nutrition(food_name: str):
+    """Fetch calories, protein, carbs, fat using USDA FoodData Central API."""
+    if not USE_REAL_NUTRITION_API or not USDA_API_KEY:
+        return None
+
+    params = {
+        "query": food_name,
+        "pageSize": 1,
+        "api_key": USDA_API_KEY,
+    }
+
+    try:
+        response = requests.get(USDA_URL, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if "foods" not in data or len(data["foods"]) == 0:
+            print(f"⚠ USDA: No results for {food_name}")
+            return None
+
+        food = data["foods"][0]
+        nutrients = {n["nutrientName"].lower(): n["value"] for n in food.get("foodNutrients", [])}
+
+        return {
+            "calories": nutrients.get("energy", 0),
+            "protein": nutrients.get("protein", 0),
+            "carbohydrate, by difference": nutrients.get("carbohydrate, by difference", 0),
+            "total lipid (fat)": nutrients.get("total lipid (fat)", 0),
+        }
+
+    except Exception as e:
+        print(f"⚠ USDA API error for {food_name}: {e}")
+        return None
+
+
+# ---------------------------------------------------------
+# Static Data (fallback values are overwritten by USDA API)
+# ---------------------------------------------------------
 USERS = [
     {"username": "testuser", "email": "test@example.com", "password": "password123"},
 ]
@@ -22,12 +68,12 @@ USERS = [
 CATEGORIES = ["Fruit", "Vegetable", "Grain", "Protein", "Nut", "Dairy"]
 
 FOOD_ITEMS = [
-    {"name": "Banana", "category": "Fruit", "calories": 100, "protein": 1, "carbs": 27, "fat": 0.3},
-    {"name": "Oatmeal", "category": "Grain", "calories": 150, "protein": 5, "carbs": 27, "fat": 3},
-    {"name": "Chicken Breast", "category": "Protein", "calories": 165, "protein": 31, "carbs": 0, "fat": 3.6},
-    {"name": "Broccoli", "category": "Vegetable", "calories": 55, "protein": 3.7, "carbs": 11, "fat": 0.6},
-    {"name": "Almonds", "category": "Nut", "calories": 170, "protein": 6, "carbs": 6, "fat": 15},
-    {"name": "Greek Yogurt", "category": "Dairy", "calories": 100, "protein": 10, "carbs": 6, "fat": 0},
+    {"name": "Banana", "category": "Fruit"},
+    {"name": "Oatmeal", "category": "Grain"},
+    {"name": "Chicken Breast", "category": "Protein"},
+    {"name": "Broccoli", "category": "Vegetable"},
+    {"name": "Almonds", "category": "Nut"},
+    {"name": "Greek Yogurt", "category": "Dairy"},
 ]
 
 MEALS = [
@@ -42,13 +88,14 @@ PREFERENCES = [
     {"key": "diet", "value": "balanced"},
 ]
 
+
 # -----------------------------
 # Seeder
 # -----------------------------
 def seed_db():
     db: Session = SessionLocal()
     try:
-        print("🔄 Seeding database...")
+        print("Seeding database...")
 
         # --- Users ---
         user_map = {}
@@ -59,47 +106,55 @@ def seed_db():
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-                print(f"🧑 Added user: {user.username}")
-            else:
-                print(f"🧑 User exists: {user.username}")
             user_map[user.username] = user
+        print(f"Users: {list(user_map.keys())}")
 
         # --- Categories ---
         category_map = {}
-        for name in CATEGORIES:
-            category = db.query(Category).filter_by(name=name).first()
+        for c_name in CATEGORIES:
+            category = db.query(Category).filter_by(name=c_name).first()
             if not category:
-                category = Category(name=name)
+                category = Category(name=c_name)
                 db.add(category)
                 db.commit()
                 db.refresh(category)
-                print(f"📦 Added category: {name}")
-            category_map[name] = category
+            category_map[c_name] = category
 
         # --- Food Items ---
         food_map = {}
-        for item in FOOD_ITEMS:
-            name = item["name"]
-            category_name = item["category"]
+        for f in FOOD_ITEMS:
 
-            food = db.query(FoodItem).filter_by(name=name).first()
+            category_name = f["category"]
+            category_obj = category_map[category_name]
+
+            # Nutrition from USDA
+            nutrition = fetch_nutrition(f["name"])
+            if nutrition:
+                calories = nutrition.get("calories", 0)
+                protein = nutrition.get("protein", 0)
+                carbs = nutrition.get("carbohydrate, by difference", 0)
+                fat = nutrition.get("total lipid (fat)", 0)
+            else:
+                # fallback when API fails
+                calories = protein = carbs = fat = 0
+
+            food = db.query(FoodItem).filter_by(name=f["name"]).first()
             if not food:
                 food = FoodItem(
-                    name=name,
-                    calories=item["calories"],
-                    protein=item["protein"],
-                    carbs=item["carbs"],
-                    fat=item["fat"],
-                    category=category_map[category_name]
+                    name=f["name"],
+                    calories=calories,
+                    protein=protein,
+                    carbs=carbs,
+                    fat=fat,
                 )
+                food.category = category_obj
                 db.add(food)
                 db.commit()
                 db.refresh(food)
-                print(f"🥗 Added food item: {name}")
-            else:
-                print(f"🥗 Food item exists: {name}")
 
-            food_map[name] = food
+            food_map[food.name] = food
+
+            print(f"Added FoodItem: {food.name} ({calories} kcal)")
 
         # --- Meals ---
         meal_map = {}
@@ -112,50 +167,45 @@ def seed_db():
                 db.add(meal)
                 db.commit()
                 db.refresh(meal)
-                print(f"🍽 Added meal: {meal.name}")
-            else:
-                print(f"🍽 Meal exists: {meal.name}")
             meal_map[meal.name] = meal
+        print(f"Meals: {list(meal_map.keys())}")
 
         # --- Preferences ---
         for user in user_map.values():
             for pref in PREFERENCES:
                 existing = db.query(Preference).filter_by(user_id=user.id, key=pref["key"]).first()
                 if not existing:
-                    p = Preference(user_id=user.id, **pref)
+                    p = Preference(user_id=user.id, key=pref["key"], value=pref["value"])
                     db.add(p)
-            db.commit()
-        print("⚙ Preferences added.")
+        db.commit()
+        print("Preferences added.")
 
-        # --- Restrictions (example) ---
+        # --- Restriction example (testing) ---
         almonds = food_map.get("Almonds")
         test_user = user_map.get("testuser")
         if almonds and test_user:
-            exists = db.query(Restriction).filter_by(
-                user_id=test_user.id, food_item_id=almonds.id
+            existing = db.query(Restriction).filter_by(
+                user_id=test_user.id,
+                food_item_id=almonds.id
             ).first()
-            if not exists:
+            if not existing:
                 db.add(Restriction(user_id=test_user.id, food_item_id=almonds.id))
-                db.commit()
-                print("🚫 Restriction added: testuser → Almonds")
+        db.commit()
+        print("Restrictions added.")
 
-        # --- Meal Plan Example ---
+        # --- Meal plan sample for today ---
         for user in user_map.values():
-            meal_plan = db.query(MealPlan).filter_by(
-                user_id=user.id, date=date.today()
-            ).first()
-
+            meal_plan = db.query(MealPlan).filter_by(user_id=user.id, date=date.today()).first()
             if not meal_plan:
                 meal_plan = MealPlan(user_id=user.id, date=date.today())
                 for meal in meal_map.values():
                     meal_plan.meals.append(meal)
                 db.add(meal_plan)
                 db.commit()
-                print(f"📅 Meal plan created for {user.username}")
-            else:
-                print(f"📅 Meal plan already exists for {user.username}")
 
-        print("\n✅ Database seeding complete!")
+        print("MealPlans added.")
+
+        print("Database seeding complete!")
 
     finally:
         db.close()

@@ -18,9 +18,17 @@ def main():
 
         # Initialize MealPlanner
         planner = MealPlanner(db, user.id)
+        week_plan = planner.suggest_multi_day_meals(days=7)
 
         # Generate meal plan
         meal_plan = planner.suggest_meals()
+
+        # Multi-day test
+        for day_plan in week_plan:
+            print(f"\n=== {day_plan.date} ===")
+            for meal in day_plan.meals:
+                foods = ", ".join(f.name for f in meal.food_items)
+                print(f"{meal.meal_type.capitalize()}: {meal.name} - {foods}")
 
         # Generate shopping list
         shopping_list = planner.export_shopping_list(meal_plan)

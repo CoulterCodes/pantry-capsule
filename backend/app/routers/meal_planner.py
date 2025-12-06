@@ -5,7 +5,7 @@ from app.db import SessionLocal
 from app.utils.meal_planner import MealPlanner
 from app.core import security
 from app.models import MealPlan, User
-from app.utils import schemas
+from app.utils import schemas  
 
 router = APIRouter(prefix="/meal-planner", tags=["meal-planner"])
 
@@ -40,7 +40,7 @@ def get_current_user(
 # ----------------------------
 # Generate Meal Plan
 # ----------------------------
-@router.post("/generate", response_model=schemas.MealPlanOut)
+@router.post("/generate", response_model=schemas.MealPlanRead)
 def generate_meal_plan(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -49,12 +49,12 @@ def generate_meal_plan(
     meal_plan = planner.suggest_meals()
     shopping_list = planner.export_shopping_list(meal_plan)
 
-    # Attach shopping list dynamically
+    # Dynamically attach shopping list to meal plan
     meal_plan.shopping_list = shopping_list
 
-    # Eager load meals and their food items
+    # Ensure meals and their food items are eager-loaded
     for meal in meal_plan.meals:
-        meal.food_items  # relationship already defined in SQLAlchemy
+        meal.food_items
 
     return meal_plan
 
@@ -70,3 +70,4 @@ def remove_food_item(
     planner = MealPlanner(db, current_user.id)
     planner.mark_removed(food_item_id)
     return {"message": f"Food item {food_item_id} marked as removed for user {current_user.id}"}
+

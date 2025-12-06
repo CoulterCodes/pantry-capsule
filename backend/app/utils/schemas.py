@@ -39,7 +39,7 @@ class FoodItemRead(FoodItemBase):
     id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # -----------------------------
@@ -53,12 +53,21 @@ class RecipeBase(BaseModel):
     tags: Optional[str] = None
 
 
-class RecipeRead(RecipeBase):
+class RecipeIngredientRead(BaseModel):
     id: int
-    ingredients: List[FoodItemRead] = Field(default_factory=list)
+    food_item: FoodItemRead
+    quantity: Optional[float] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True
+
+
+class RecipeRead(RecipeBase):
+    id: int
+    ingredients: List[RecipeIngredientRead] = Field(default_factory=list)
+
+    class Config:
+        orm_mode = True
 
 
 # -----------------------------
@@ -75,7 +84,7 @@ class MealRead(MealBase):
     recipes: List[RecipeRead] = Field(default_factory=list)
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # -----------------------------
@@ -88,9 +97,10 @@ class MealPlanBase(BaseModel):
 class MealPlanRead(MealPlanBase):
     id: int
     meals: List[MealRead] = Field(default_factory=list)
+    shopping_list: Optional[dict] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # -----------------------------
@@ -105,7 +115,7 @@ class PreferenceRead(PreferenceBase):
     id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class RestrictionBase(BaseModel):
@@ -116,7 +126,7 @@ class RestrictionRead(RestrictionBase):
     id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # -----------------------------
@@ -134,7 +144,7 @@ class UserRead(UserBase):
     restrictions: List[RestrictionRead] = Field(default_factory=list)
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # Backward compatibility aliases for existing routers
